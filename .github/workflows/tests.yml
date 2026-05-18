@@ -44,3 +44,37 @@ jobs:
           cat /tmp/pytest_out.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           exit $EXIT
+
+      - name: Post failure output as PR comment
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import json, urllib.request, os, sys
+          try:
+              output = open('/tmp/pytest_out.txt').read()
+          except FileNotFoundError:
+              output = '(no output captured)'
+          # Keep last 6000 chars to stay under GitHub comment limit
+          if len(output) > 6000:
+              output = '...(truncated)...\n' + output[-6000:]
+          py_ver = '${{ matrix.python-version }}'
+          body = f'### CI Failure Log (Python {py_ver})\n\`\`\`\n{output}\n\`\`\`'
+          data = json.dumps({'body': body}).encode()
+          token = os.environ.get('GH_TOKEN', '')
+          req = urllib.request.Request(
+              'https://api.github.com/repos/scootaash/hass-timer-manager/issues/2/comments',
+              data=data,
+              headers={
+                  'Authorization': f'token {token}',
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/vnd.github.v3+json',
+              }
+          )
+          try:
+              resp = urllib.request.urlopen(req)
+              print('Comment posted successfully')
+          except Exception as e:
+              print(f'Failed to post comment: {e}', file=sys.stderr)
+          "
