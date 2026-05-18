@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.components.intent import TimerEventType
 from homeassistant.core import HomeAssistant
 
 from custom_components.voice_timers import async_setup_entry, async_unload_entry
@@ -25,9 +24,6 @@ async def _setup(
     """Call async_setup_entry with the sensor platform stubbed out."""
     hass.data["_test_stub"] = stub_manager
     with patch(
-        "homeassistant.components.intent.timers.TimerManager",
-        type(stub_manager),
-    ), patch(
         "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups",
         new=AsyncMock(return_value=True),
     ):
@@ -74,9 +70,9 @@ async def test_wrapped_handler_calls_original(
     await _setup(hass, config_entry, stub_manager)
 
     info = StubTimerInfo("t1", name="pasta")
-    stub_manager.handlers["dev1"](TimerEventType.STARTED, info)
+    stub_manager.handlers["dev1"]("started", info)
 
-    original.assert_called_once_with(TimerEventType.STARTED, info)
+    original.assert_called_once_with("started", info)
 
 
 async def test_wrapped_handler_fires_event(
@@ -91,7 +87,7 @@ async def test_wrapped_handler_fires_event(
     hass.bus.async_listen(EVENT_TIMER, lambda e: received.append(e))
 
     info = StubTimerInfo("t1", name="pasta")
-    stub_manager.handlers["dev1"](TimerEventType.STARTED, info)
+    stub_manager.handlers["dev1"]("started", info)
     await hass.async_block_till_done()
 
     assert len(received) == 1
@@ -146,7 +142,7 @@ async def test_no_event_fired_after_unload(
     hass.bus.async_listen(EVENT_TIMER, lambda e: received.append(e))
 
     # Call the original (restored) handler directly — it's a MagicMock, won't fire.
-    stub_manager.handlers["dev1"](TimerEventType.STARTED, StubTimerInfo("t1"))
+    stub_manager.handlers["dev1"]("started", StubTimerInfo("t1"))
     await hass.async_block_till_done()
 
     assert received == []
@@ -183,10 +179,10 @@ async def test_late_registration_fires_event(
     hass.bus.async_listen(EVENT_TIMER, lambda e: received.append(e))
 
     info = StubTimerInfo("t2", name="laundry")
-    stub_manager.handlers["late_dev"](TimerEventType.STARTED, info)
+    stub_manager.handlers["late_dev"]("started", info)
     await hass.async_block_till_done()
 
-    late.assert_called_once_with(TimerEventType.STARTED, info)
+    late.assert_called_once_with("started", info)
     assert len(received) == 1
     assert received[0].data["timer_id"] == "t2"
 
