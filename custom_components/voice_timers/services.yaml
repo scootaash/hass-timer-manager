@@ -1,0 +1,55 @@
+pause:
+  name: Pause timer
+  description: Pause an active voice timer.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: The unique ID of the timer to pause.
+      required: true
+      selector:
+        text:
+
+unpause:
+  name: Unpause timer
+  description: Resume a paused voice timer.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: The unique ID of the timer to resume.
+      required: true
+      selector:
+        text:
+
+cancel:
+  name: Cancel timer
+  description: Cancel a voice timer without firing the finished event.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: The unique ID of the timer to cancel.
+      required: true
+      selector:
+        text:
+
+add_time:
+  name: Add time
+  description: >
+    Extend (or shrink, with a negative value) a running timer.
+    Positive values call TimerManager.add_time; negative values call
+    TimerManager.remove_time with the absolute value.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: The unique ID of the timer to adjust.
+      required: true
+      selector:
+        text:
+    seconds:
+      name: Seconds
+      description: Seconds to add (negative to subtract, range −3600…3600).
+      required: true
+      selector:
+        number:
+          min: -3600
+          max: 3600
+          unit_of_measurement: s
