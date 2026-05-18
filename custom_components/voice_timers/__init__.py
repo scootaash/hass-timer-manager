@@ -44,16 +44,13 @@ _ADD_TIME_SCHEMA = vol.Schema(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Voice Timers from a config entry."""
+    # Lazy import so a future HA reshuffle only breaks at runtime, not import.
+    from homeassistant.components.intent.timers import TimerManager
+
     # Find the TimerManager that the intent integration creates.
-    # We use duck typing rather than isinstance so this works regardless of
-    # where TimerManager lives in the HA package tree across versions.
     timer_manager: Any | None = None
     for value in hass.data.values():
-        if (
-            callable(getattr(value, "pause_timer", None))
-            and callable(getattr(value, "cancel_timer", None))
-            and hasattr(value, "handlers")
-        ):
+        if isinstance(value, TimerManager):
             timer_manager = value
             break
 

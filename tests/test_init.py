@@ -24,6 +24,9 @@ async def _setup(
     """Call async_setup_entry with the sensor platform stubbed out."""
     hass.data["_test_stub"] = stub_manager
     with patch(
+        "homeassistant.components.intent.timers.TimerManager",
+        type(stub_manager),
+    ), patch(
         "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups",
         new=AsyncMock(return_value=True),
     ):

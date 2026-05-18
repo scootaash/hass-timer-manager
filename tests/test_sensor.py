@@ -259,8 +259,9 @@ async def test_summary_sensor_decrements_on_finished(hass: HomeAssistant) -> Non
     await hass.async_block_till_done()
     assert summary.native_value == 2
 
-    _fire(hass, "finished", "t1")
-    await hass.async_block_till_done()
+    with patch("asyncio.sleep", new=AsyncMock()):
+        _fire(hass, "finished", "t1")
+        await hass.async_block_till_done()
     assert summary.native_value == 1
     assert "t1" not in summary.extra_state_attributes["timer_ids"]
 
@@ -278,8 +279,9 @@ async def test_summary_sensor_by_device(hass: HomeAssistant) -> None:
     assert by_device.get("dev1") == 1
     assert by_device.get("dev2") == 1
 
-    _fire(hass, "cancelled", "t1", device_id="dev1")
-    await hass.async_block_till_done()
+    with patch("asyncio.sleep", new=AsyncMock()):
+        _fire(hass, "cancelled", "t1", device_id="dev1")
+        await hass.async_block_till_done()
 
     by_device = summary.extra_state_attributes["by_device"]
     assert "dev1" not in by_device
