@@ -1,6 +1,8 @@
 """Tests for Voice Timers __init__: handler wrapping, services, unload."""
 from __future__ import annotations
 
+import sys
+import types
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,14 +24,17 @@ async def _setup(
     stub_manager: StubTimerManager,
 ) -> bool:
     """Call async_setup_entry with the sensor platform stubbed out."""
+    # Inject a synthetic timers module so isinstance(stub_manager, TimerManager)
+    # works regardless of the HA version's actual module layout.
+    _mock_timers = types.ModuleType("homeassistant.components.intent.timers")
+    _mock_timers.TimerManager = type(stub_manager)
+
     hass.data["_test_stub"] = stub_manager
-    with patch(
-        "homeassistant.components.intent.timers.TimerManager",
-        type(stub_manager),
-    ), patch(
-        "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups",
-        new=AsyncMock(return_value=True),
-    ):
+    with patch.dict(sys.modules, {"homeassistant.components.intent.timers": _mock_timers}), \
+         patch(
+             "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups",
+             new=AsyncMock(return_value=True),
+         ):
         return await async_setup_entry(hass, config_entry)
 
 
