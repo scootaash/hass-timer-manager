@@ -29,7 +29,16 @@ jobs:
       - name: Run tests
         run: |
           set +e
-          pytest --tb=short -q 2>&1 | tee /tmp/pytest_out.txt
+          python -c "
+          from homeassistant.const import VERSION
+          print('HA version:', VERSION)
+          try:
+              from homeassistant.components.intent.timers import TimerManager
+              print('TimerManager: OK -', TimerManager)
+          except Exception as e:
+              print('TimerManager import FAILED:', e)
+          " 2>&1 | tee -a /tmp/pytest_out.txt
+          pytest --tb=short -q 2>&1 | tee -a /tmp/pytest_out.txt
           EXIT=${PIPESTATUS[0]}
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat /tmp/pytest_out.txt >> $GITHUB_STEP_SUMMARY
