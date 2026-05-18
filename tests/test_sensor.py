@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import EntityPlatformState
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.voice_timers.sensor import (
@@ -33,6 +34,9 @@ async def _setup_platform(hass: HomeAssistant):
     def add_entities(entities, update_before_add: bool = False) -> None:
         for ent in entities:
             ent.hass = hass
+            # Mark as ADDED so async_write_ha_state passes the writable check
+            # introduced in HA 2025.1.x without a real EntityPlatform.
+            ent._platform_state = EntityPlatformState.ADDED  # noqa: SLF001
             if isinstance(ent, VoiceTimersActiveSensor):
                 summary_holder.append(ent)
                 # Wire up async_added_to_hass so it subscribes to the bus.
