@@ -26,5 +26,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements_test.txt
 
+      - name: Diagnose environment
+        run: |
+          python -c "import homeassistant; print('HA version:', homeassistant.__version__)"
+          python -c "from homeassistant.helpers.entity import EntityPlatformState; print('EntityPlatformState OK')" || echo "EntityPlatformState NOT in homeassistant.helpers.entity"
+          python -c "from homeassistant.helpers.device_registry import DeviceInfo; print('DeviceInfo in device_registry OK')" || echo "DeviceInfo NOT in device_registry"
+          python -c "from homeassistant.helpers.entity_platform import AddEntitiesCallback; print('AddEntitiesCallback OK')" || echo "AddEntitiesCallback NOT found"
+          python -c "from homeassistant.components.intent.timers import TimerManager; print('TimerManager OK')" || echo "TimerManager NOT found"
+          python -c "from homeassistant.components.intent import TimerEventType; print('TimerEventType OK')" || echo "TimerEventType NOT found"
+
       - name: Run tests
-        run: pytest --tb=short -q
+        run: pytest --tb=long -q
