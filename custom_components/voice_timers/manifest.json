@@ -4,7 +4,8 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["intent"],
-  "documentation": "https://github.com/fraserg/voice-timers",
+  "documentation": "https://github.com/scootaash/hass-timer-manager",
+  "homeassistant": "2024.6.0",
   "iot_class": "local_push",
   "version": "0.1.0"
 }
