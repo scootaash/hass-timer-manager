@@ -135,7 +135,9 @@ async def test_unload_reverts_register_handler_patch(
     assert stub_manager.register_handler is not original_register
 
     await _unload(hass, config_entry)
-    assert stub_manager.register_handler is original_register
+    # After unload the instance attribute override is deleted; the class method
+    # is restored. Bound methods are re-created on each access so compare __func__.
+    assert stub_manager.register_handler.__func__ is original_register.__func__
 
 
 async def test_no_event_fired_after_unload(
