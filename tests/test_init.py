@@ -273,6 +273,45 @@ async def test_service_add_time_zero(
     stub_manager.remove_time.assert_not_called()
 
 
+async def test_service_cancel_via_entity_id(
+    hass: HomeAssistant, config_entry, stub_manager: StubTimerManager
+) -> None:
+    """Services accept entity_id and resolve it to timer_id via state attributes."""
+    await _setup(hass, config_entry, stub_manager)
+
+    # Inject a fake state that mimics what VoiceTimerSensor would write.
+    from homeassistant.core import State
+    hass.states.async_set(
+        "sensor.voice_timer_abc",
+        "active",
+        {"timer_id": "abc"},
+    )
+
+    await hass.services.async_call(
+        DOMAIN, "cancel", {"entity_id": "sensor.voice_timer_abc"}, blocking=True
+    )
+    stub_manager.cancel_timer.assert_called_once_with("abc")
+
+
+async def test_service_add_time_via_entity_id(
+    hass: HomeAssistant, config_entry, stub_manager: StubTimerManager
+) -> None:
+    """add_time also resolves entity_id to timer_id."""
+    await _setup(hass, config_entry, stub_manager)
+
+    from homeassistant.core import State
+    hass.states.async_set(
+        "sensor.voice_timer_xyz",
+        "active",
+        {"timer_id": "xyz"},
+    )
+
+    await hass.services.async_call(
+        DOMAIN, "add_time", {"entity_id": "sensor.voice_timer_xyz", "seconds": 60}, blocking=True
+    )
+    stub_manager.add_time.assert_called_once_with("xyz", 60)
+
+
 async def test_services_removed_on_unload(
     hass: HomeAssistant, config_entry, stub_manager: StubTimerManager
 ) -> None:
