@@ -6,8 +6,16 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import EntityPlatformState
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+# EntityPlatformState marks an entity as fully added so async_write_ha_state
+# doesn't log an error. Import defensively — it moved/was restructured in
+# some HA versions.
+try:
+    from homeassistant.helpers.entity import EntityPlatformState as _EPS
+    _PLATFORM_STATE_ADDED = _EPS.ADDED
+except (ImportError, AttributeError):
+    _PLATFORM_STATE_ADDED = None
 
 from custom_components.voice_timers.sensor import (
     LINGER_SECONDS,
@@ -34,9 +42,8 @@ async def _setup_platform(hass: HomeAssistant):
     def add_entities(entities, update_before_add: bool = False) -> None:
         for ent in entities:
             ent.hass = hass
-            # Mark as ADDED so async_write_ha_state passes the writable check
-            # introduced in HA 2025.1.x without a real EntityPlatform.
-            ent._platform_state = EntityPlatformState.ADDED  # noqa: SLF001
+            if _PLATFORM_STATE_ADDED is not None:
+                ent._platform_state = _PLATFORM_STATE_ADDED  # noqa: SLF001
             if isinstance(ent, VoiceTimersActiveSensor):
                 summary_holder.append(ent)
                 # Wire up async_added_to_hass so it subscribes to the bus.
@@ -259,8 +266,9 @@ async def test_summary_sensor_decrements_on_finished(hass: HomeAssistant) -> Non
     await hass.async_block_till_done()
     assert summary.native_value == 2
 
-    _fire(hass, "finished", "t1")
-    await hass.async_block_till_done()
+    with patch("asyncio.sleep", new=AsyncMock()):
+        _fire(hass, "finished", "t1")
+        await hass.async_block_till_done()
     assert summary.native_value == 1
     assert "t1" not in summary.extra_state_attributes["timer_ids"]
 
@@ -278,8 +286,9 @@ async def test_summary_sensor_by_device(hass: HomeAssistant) -> None:
     assert by_device.get("dev1") == 1
     assert by_device.get("dev2") == 1
 
-    _fire(hass, "cancelled", "t1", device_id="dev1")
-    await hass.async_block_till_done()
+    with patch("asyncio.sleep", new=AsyncMock()):
+        _fire(hass, "cancelled", "t1", device_id="dev1")
+        await hass.async_block_till_done()
 
     by_device = summary.extra_state_attributes["by_device"]
     assert "dev1" not in by_device

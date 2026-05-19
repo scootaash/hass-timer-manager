@@ -10,6 +10,8 @@ jobs:
   pytest:
     name: pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
@@ -27,4 +29,33 @@ jobs:
         run: pip install -r requirements_test.txt
 
       - name: Run tests
-        run: pytest --tb=short -q
+        run: |
+          set +e
+          python -c "
+          from homeassistant.const import VERSION
+          print('HA version:', VERSION)
+          try:
+              from homeassistant.components.intent.timers import TimerManager
+              print('TimerManager: OK -', TimerManager)
+          except Exception as e:
+              print('TimerManager import FAILED:', e)
+          " 2>&1 | tee -a /tmp/pytest_out.txt
+          pytest --tb=short -q 2>&1 | tee -a /tmp/pytest_out.txt
+          EXIT=${PIPESTATUS[0]}
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/pytest_out.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit $EXIT
+
+      - name: Post failure output as PR comment
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OUTPUT=$(cat /tmp/pytest_out.txt 2>/dev/null | tail -c 6000 || echo "(no output captured)")
+          gh pr comment 2 \
+            --repo scootaash/hass-timer-manager \
+            --body "### CI Failure Log (Python ${{ matrix.python-version }})
+\`\`\`
+${OUTPUT}
+\`\`\`"

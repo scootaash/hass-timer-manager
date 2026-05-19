@@ -12,8 +12,17 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 
 @pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations):
-    """Allow the test harness to load custom integrations."""
+def auto_enable_custom_integrations(request):
+    """Allow the test harness to load custom integrations.
+
+    Calls enable_custom_integrations if it exists in this version of
+    pytest-homeassistant-custom-component; silently skips if it was
+    removed or renamed in a newer release.
+    """
+    try:
+        request.getfixturevalue("enable_custom_integrations")
+    except pytest.FixtureLookupError:
+        pass
     yield
 
 
