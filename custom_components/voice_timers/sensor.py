@@ -95,7 +95,9 @@ class VoiceTimerSensor(SensorEntity):
         self._finishes_at = now + timedelta(seconds=self._seconds_left)
 
         self._attr_unique_id = f"voice_timer_{self._timer_id}"
-        self._attr_name = self._label or f"Voice timer {self._timer_id[:6]}"
+        self._attr_name = (
+            self._label.capitalize() if self._label else f"Voice timer {self._timer_id[:6]}"
+        )
         # Set entity_id explicitly so it matches sensor.voice_timer_<uuid>
         # regardless of the timer name.
         self.entity_id = f"sensor.voice_timer_{self._timer_id}"

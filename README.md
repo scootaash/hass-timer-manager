@@ -16,7 +16,9 @@ This integration wraps each registered handler. The original is still called (so
 
 ## Dashboard
 
-Requires `auto-entities` and `timer-bar-card` from HACS.
+### Classic
+
+Requires [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) and [timer-bar-card](https://github.com/rianadon/timer-bar-card) from HACS.
 
 ```yaml
 type: custom:auto-entities
@@ -25,8 +27,7 @@ card:
   type: custom:timer-bar-card
   name: Voice timers
   compressed: true
-  active_state:
-    - active
+  active_state: active
   start_time:
     attribute: started_at
   end_time:
@@ -42,6 +43,48 @@ filter:
   include:
     - entity_id: sensor.voice_timer_*
 ```
+
+### Mushroom
+
+Requires `auto-entities`, `timer-bar-card`, and [Mushroom](https://github.com/piitaya/lovelace-mushroom) from HACS.
+
+```yaml
+type: custom:auto-entities
+show_empty: false
+card:
+  type: custom:timer-bar-card
+  name: Voice timers
+  compressed: true
+  active_state: active
+  start_time:
+    attribute: started_at
+  end_time:
+    attribute: finishes_at
+  bar_foreground: rgb(var(--rgb-primary-color))
+  bar_background: rgba(var(--rgb-primary-color), 0.15)
+  text_color: var(--primary-text-color)
+  text_width: 5em
+  modifications:
+    - elapsed: 75%
+      bar_foreground: orange
+    - elapsed: 95%
+      bar_foreground: red
+filter:
+  include:
+    - entity_id: sensor.voice_timer_*
+```
+
+### Key options
+
+| Option | Where | Description |
+|--------|-------|-------------|
+| `show_empty: false` | `auto-entities` | Hide the whole card when no timers are running |
+| `compressed: true` | `timer-bar-card` | Bar and time on one row instead of two |
+| `text_width` | `timer-bar-card` | Width of the countdown text column (default `5em`) |
+| `bar_foreground` | `timer-bar-card` | Bar fill colour — any CSS colour or variable |
+| `bar_background` | `timer-bar-card` | Track colour behind the bar |
+| `modifications` | `timer-bar-card` | Override bar colour at a given `elapsed` percentage |
+| `active_state` | `timer-bar-card` | State value(s) the card treats as "running" (`active` for this integration) |
 
 ## Event payload
 
