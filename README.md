@@ -86,6 +86,63 @@ filter:
 | `modifications` | `timer-bar-card` | Override bar colour at a given `elapsed` percentage |
 | `active_state` | `timer-bar-card` | State value(s) the card treats as "running" (`active` for this integration) |
 
+## Services
+
+Four services let you control timers from the dashboard, scripts, or automations.
+
+| Service | What it does |
+|---------|-------------|
+| `voice_timers.pause` | Pause a running timer |
+| `voice_timers.unpause` | Resume a paused timer |
+| `voice_timers.cancel` | Cancel a timer (no finished event fires) |
+| `voice_timers.add_time` | Add seconds (positive) or subtract seconds (negative) |
+
+All services accept **`entity_id`** (the `sensor.voice_timer_*` entity — shown as a dropdown in the UI) or the raw **`timer_id`** UUID for automation use.
+
+### From the Developer Tools
+
+**Developer Tools → Actions → voice_timers.cancel** — pick the entity from the dropdown, hit Perform Action.
+
+### From a button card
+
+```yaml
+type: button
+name: Cancel
+icon: mdi:timer-off
+tap_action:
+  action: perform-action
+  perform_action: voice_timers.cancel
+  data:
+    entity_id: sensor.voice_timer_<uuid>
+```
+
+### From an automation (timer finished → chime)
+
+```yaml
+trigger:
+  - platform: event
+    event_type: voice_timers_event
+    event_data:
+      event_type: finished
+action:
+  - service: media_player.play_media
+    target:
+      entity_id: media_player.kitchen_sonos
+    data:
+      media_content_id: /local/chime.mp3
+      media_content_type: music
+```
+
+### Add / remove time from an automation
+
+```yaml
+action:
+  - service: voice_timers.add_time
+    data:
+      entity_id: sensor.voice_timer_<uuid>
+      seconds: 120   # −120 to remove 2 minutes
+```
+
 ## Event payload
 
 For automations that need to react to a timer ending (e.g. an extra chime on a Sonos):

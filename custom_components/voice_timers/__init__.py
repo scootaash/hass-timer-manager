@@ -31,14 +31,30 @@ SERVICE_UNPAUSE = "unpause"
 SERVICE_CANCEL = "cancel"
 SERVICE_ADD_TIME = "add_time"
 
-_TIMER_ID_SCHEMA = vol.Schema({vol.Required("timer_id"): cv.string})
-_ADD_TIME_SCHEMA = vol.Schema(
-    {
-        vol.Required("timer_id"): cv.string,
-        vol.Required("seconds"): vol.All(
-            vol.Coerce(int), vol.Range(min=-3600, max=3600)
-        ),
-    }
+def _require_timer_target(value: dict) -> dict:
+    if "timer_id" not in value and "entity_id" not in value:
+        raise vol.Invalid("Provide either timer_id or entity_id")
+    return value
+
+_TIMER_TARGET = vol.All(
+    vol.Schema(
+        {vol.Optional("timer_id"): cv.string, vol.Optional("entity_id"): cv.entity_id},
+        extra=vol.ALLOW_EXTRA,
+    ),
+    _require_timer_target,
+)
+_TIMER_ID_SCHEMA = _TIMER_TARGET
+_ADD_TIME_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional("timer_id"): cv.string,
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Required("seconds"): vol.All(
+                vol.Coerce(int), vol.Range(min=-3600, max=3600)
+            ),
+        }
+    ),
+    _require_timer_target,
 )
 
 
@@ -150,11 +166,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _resolve_timer_id(hass: HomeAssistant, call: ServiceCall) -> str:
+    if "timer_id" in call.data:
+        return call.data["timer_id"]
+    entity_id: str = call.data["entity_id"]
+    state = hass.states.get(entity_id)
+    if state is None:
+        raise ServiceValidationError(f"Entity {entity_id} not found")
+    timer_id = state.attributes.get("timer_id")
+    if not timer_id:
+        raise ServiceValidationError(f"{entity_id} has no timer_id attribute")
+    return timer_id
+
+
 def _register_services(hass: HomeAssistant, manager: Any) -> None:
     """Register the four voice_timers control services."""
 
     async def handle_pause(call: ServiceCall) -> None:
-        timer_id: str = call.data["timer_id"]
+        timer_id: str = _resolve_timer_id(hass, call)
         try:
             manager.pause_timer(timer_id)
         except Exception as err:
@@ -163,7 +192,7 @@ def _register_services(hass: HomeAssistant, manager: Any) -> None:
             ) from err
 
     async def handle_unpause(call: ServiceCall) -> None:
-        timer_id: str = call.data["timer_id"]
+        timer_id: str = _resolve_timer_id(hass, call)
         try:
             manager.unpause_timer(timer_id)
         except Exception as err:
@@ -172,7 +201,7 @@ def _register_services(hass: HomeAssistant, manager: Any) -> None:
             ) from err
 
     async def handle_cancel(call: ServiceCall) -> None:
-        timer_id: str = call.data["timer_id"]
+        timer_id: str = _resolve_timer_id(hass, call)
         try:
             manager.cancel_timer(timer_id)
         except Exception as err:
@@ -181,7 +210,7 @@ def _register_services(hass: HomeAssistant, manager: Any) -> None:
             ) from err
 
     async def handle_add_time(call: ServiceCall) -> None:
-        timer_id: str = call.data["timer_id"]
+        timer_id: str = _resolve_timer_id(hass, call)
         seconds: int = int(call.data["seconds"])
         try:
             if seconds >= 0:

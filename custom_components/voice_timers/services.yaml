@@ -2,10 +2,18 @@ pause:
   name: Pause timer
   description: Pause an active voice timer.
   fields:
+    entity_id:
+      name: Timer entity
+      description: The voice timer sensor entity to pause.
+      required: false
+      selector:
+        entity:
+          integration: voice_timers
+          domain: sensor
     timer_id:
-      name: Timer ID
-      description: The unique ID of the timer to pause.
-      required: true
+      name: Timer ID (advanced)
+      description: Raw timer UUID — use entity_id instead unless calling from an automation with a dynamic ID.
+      required: false
       selector:
         text:
 
@@ -13,10 +21,18 @@ unpause:
   name: Unpause timer
   description: Resume a paused voice timer.
   fields:
+    entity_id:
+      name: Timer entity
+      description: The voice timer sensor entity to resume.
+      required: false
+      selector:
+        entity:
+          integration: voice_timers
+          domain: sensor
     timer_id:
-      name: Timer ID
-      description: The unique ID of the timer to resume.
-      required: true
+      name: Timer ID (advanced)
+      description: Raw timer UUID — use entity_id instead unless calling from an automation with a dynamic ID.
+      required: false
       selector:
         text:
 
@@ -24,24 +40,39 @@ cancel:
   name: Cancel timer
   description: Cancel a voice timer without firing the finished event.
   fields:
+    entity_id:
+      name: Timer entity
+      description: The voice timer sensor entity to cancel.
+      required: false
+      selector:
+        entity:
+          integration: voice_timers
+          domain: sensor
     timer_id:
-      name: Timer ID
-      description: The unique ID of the timer to cancel.
-      required: true
+      name: Timer ID (advanced)
+      description: Raw timer UUID — use entity_id instead unless calling from an automation with a dynamic ID.
+      required: false
       selector:
         text:
 
 add_time:
-  name: Add time
+  name: Add / remove time
   description: >
-    Extend (or shrink, with a negative value) a running timer.
-    Positive values call TimerManager.add_time; negative values call
-    TimerManager.remove_time with the absolute value.
+    Extend or shrink a running timer. Positive values add time; negative
+    values subtract it (routed to TimerManager.remove_time internally).
   fields:
+    entity_id:
+      name: Timer entity
+      description: The voice timer sensor entity to adjust.
+      required: false
+      selector:
+        entity:
+          integration: voice_timers
+          domain: sensor
     timer_id:
-      name: Timer ID
-      description: The unique ID of the timer to adjust.
-      required: true
+      name: Timer ID (advanced)
+      description: Raw timer UUID — use entity_id instead unless calling from an automation with a dynamic ID.
+      required: false
       selector:
         text:
     seconds:
