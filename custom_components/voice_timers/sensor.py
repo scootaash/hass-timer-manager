@@ -21,6 +21,7 @@ try:
 except ImportError:
     from homeassistant.helpers.entity import DeviceInfo  # type: ignore[no-redef]
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, EVENT_TIMER, LINGER_SECONDS
@@ -34,6 +35,19 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Subscribe to timer events and spawn sensors on demand."""
+    # Remove any stale per-timer entities left in the registry from a previous
+    # session. Older versions set unique_id on VoiceTimerSensor, which caused
+    # every finished timer to linger as "Unavailable" forever.
+    ent_reg = er.async_get(hass)
+    stale = [
+        reg_entry.entity_id
+        for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+        if (reg_entry.unique_id or "").startswith("voice_timer_")
+        and reg_entry.unique_id != "voice_timers_active"
+    ]
+    for entity_id in stale:
+        ent_reg.async_remove(entity_id)
+
     entities: dict[str, VoiceTimerSensor] = {}
 
     summary = VoiceTimersActiveSensor()
@@ -94,7 +108,6 @@ class VoiceTimerSensor(SensorEntity):
         self._started_at = now
         self._finishes_at = now + timedelta(seconds=self._seconds_left)
 
-        self._attr_unique_id = f"voice_timer_{self._timer_id}"
         self._attr_name = (
             self._label.capitalize() if self._label else f"Voice timer {self._timer_id[:6]}"
         )
