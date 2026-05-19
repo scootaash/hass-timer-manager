@@ -48,12 +48,12 @@ jobs:
           exit $EXIT
 
       - name: Post failure output as PR comment
-        if: failure()
+        if: failure() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           OUTPUT=$(cat /tmp/pytest_out.txt 2>/dev/null | tail -c 6000 || echo "(no output captured)")
-          gh pr comment 2 \
+          gh pr comment ${{ github.event.pull_request.number }} \
             --repo scootaash/hass-timer-manager \
             --body "### CI Failure Log (Python ${{ matrix.python-version }})
 \`\`\`

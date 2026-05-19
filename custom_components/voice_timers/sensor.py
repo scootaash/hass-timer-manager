@@ -23,12 +23,9 @@ except ImportError:
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENT_TIMER
+from .const import DOMAIN, EVENT_TIMER, LINGER_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
-
-# How long to keep a finished or cancelled timer visible before removing it.
-LINGER_SECONDS = 30
 
 
 async def async_setup_entry(

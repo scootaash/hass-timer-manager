@@ -47,7 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Lazy import — if the class moves between HA versions we fall back to duck typing.
     try:
         from homeassistant.components.intent.timers import TimerManager as _TM
-    except (ImportError, Exception):
+    except ImportError:
         _TM = None
 
     _DUCK_ATTRS = ("handlers", "pause_timer", "cancel_timer", "register_handler")
