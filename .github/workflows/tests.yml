@@ -53,9 +53,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           OUTPUT=$(cat /tmp/pytest_out.txt 2>/dev/null | tail -c 6000 || echo "(no output captured)")
+          printf '### CI Failure Log (Python %s)\n```\n%s\n```\n' \
+            '${{ matrix.python-version }}' "$OUTPUT" > /tmp/pr_comment.md
           gh pr comment ${{ github.event.pull_request.number }} \
             --repo scootaash/hass-timer-manager \
-            --body "### CI Failure Log (Python ${{ matrix.python-version }})
-\`\`\`
-${OUTPUT}
-\`\`\`"
+            --body-file /tmp/pr_comment.md

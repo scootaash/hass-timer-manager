@@ -41,8 +41,6 @@ card:
 filter:
   include:
     - entity_id: sensor.voice_timer_*
-      options:
-        name: this.attributes.friendly_label
 ```
 
 ## Event payload

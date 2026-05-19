@@ -223,9 +223,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if handlers is not None:
             for device_id, original in store.get("originals", {}).items():
                 handlers[device_id] = original
-        original_register = store.get("original_register")
-        if original_register is not None:
-            manager.register_handler = original_register
+        if store.get("original_register") is not None:
+            # Remove the instance attribute override, restoring the class method.
+            try:
+                del manager.register_handler
+            except AttributeError:
+                pass
 
     for service_name in (SERVICE_PAUSE, SERVICE_UNPAUSE, SERVICE_CANCEL, SERVICE_ADD_TIME):
         hass.services.async_remove(DOMAIN, service_name)
