@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 # EntityPlatformState marks an entity as fully added so async_write_ha_state
@@ -24,16 +25,20 @@ from custom_components.voice_timers.sensor import (
     async_setup_entry,
 )
 from custom_components.voice_timers.const import DOMAIN, EVENT_TIMER
+from .conftest import StubTimerInfo, StubTimerManager
 
 
 # ---------------------------------------------------------------------------
 # Platform setup helper
 # ---------------------------------------------------------------------------
 
-async def _setup_platform(hass: HomeAssistant):
+async def _setup_platform(hass: HomeAssistant, manager=None):
     """Set up the sensor platform; return the add_entities-tracked lists."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN)
     entry.add_to_hass(hass)
+
+    if manager is not None:
+        hass.data.setdefault(DOMAIN, {})["manager"] = manager
 
     per_timer: dict[str, VoiceTimerSensor] = {}
     summary_holder: list[VoiceTimersActiveSensor] = []
@@ -305,3 +310,203 @@ def test_summary_sensor_entity_id() -> None:
     assert entity.native_value == 0
     assert entity.extra_state_attributes["timer_ids"] == []
     assert entity.extra_state_attributes["by_device"] == {}
+
+
+# ---------------------------------------------------------------------------
+# started_at accuracy for bootstrapped (in-progress) timers
+# ---------------------------------------------------------------------------
+
+def test_timer_sensor_started_at_for_in_progress_timer() -> None:
+    """started_at is backdated correctly when seconds_left < seconds."""
+    from homeassistant.util import dt as dt_util
+    from datetime import timedelta
+
+    before = dt_util.utcnow()
+    entity = VoiceTimerSensor(
+        {
+            "timer_id": "abc",
+            "device_id": "dev1",
+            "name": "pasta",
+            "seconds": 300,
+            "seconds_left": 120,  # 3 minutes elapsed
+            "is_active": True,
+        }
+    )
+    after = dt_util.utcnow()
+
+    # started_at should be roughly (now - 180s), i.e. 300 - 120 = 180s ago
+    elapsed = 300 - 120
+    assert entity._started_at <= before - timedelta(seconds=elapsed) + timedelta(seconds=1)
+    assert entity._started_at >= after - timedelta(seconds=elapsed) - timedelta(seconds=1)
+    # finishes_at should be roughly now + 120s
+    assert entity._finishes_at >= before + timedelta(seconds=119)
+    assert entity._finishes_at <= after + timedelta(seconds=121)
+
+
+def test_timer_sensor_started_at_for_fresh_timer() -> None:
+    """started_at equals now when seconds_left == seconds (brand-new timer)."""
+    from homeassistant.util import dt as dt_util
+
+    before = dt_util.utcnow()
+    entity = VoiceTimerSensor(
+        {
+            "timer_id": "abc",
+            "device_id": "dev1",
+            "name": "pasta",
+            "seconds": 300,
+            "seconds_left": 300,
+            "is_active": True,
+        }
+    )
+    after = dt_util.utcnow()
+
+    assert entity._started_at >= before
+    assert entity._started_at <= after
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap: sensors created for timers already running at integration load
+# ---------------------------------------------------------------------------
+
+async def test_bootstrap_creates_sensor_for_active_timer(hass: HomeAssistant) -> None:
+    """Sensors are created for timers already in TimerManager.timers at load time."""
+    manager = StubTimerManager()
+    manager.timers = {"t_existing": StubTimerInfo("t_existing", name="soup", seconds=600, seconds_left=300)}
+
+    per_timer, _ = await _setup_platform(hass, manager=manager)
+
+    assert "t_existing" in per_timer
+    entity = per_timer["t_existing"]
+    assert entity.native_value == "active"
+    assert entity.extra_state_attributes["friendly_label"] == "soup"
+    assert entity.entity_id == "sensor.voice_timer_t_existing"
+
+
+async def test_bootstrap_sets_started_at_correctly(hass: HomeAssistant) -> None:
+    """Bootstrapped timer has started_at backdated based on elapsed time."""
+    from homeassistant.util import dt as dt_util
+    from datetime import timedelta
+
+    manager = StubTimerManager()
+    manager.timers = {
+        "t1": StubTimerInfo("t1", seconds=300, seconds_left=120)
+    }
+
+    per_timer, _ = await _setup_platform(hass, manager=manager)
+
+    entity = per_timer["t1"]
+    elapsed = 300 - 120  # 180 seconds
+    now = dt_util.utcnow()
+    assert entity._started_at <= now - timedelta(seconds=elapsed - 1)
+
+
+async def test_bootstrap_updates_summary_sensor(hass: HomeAssistant) -> None:
+    """Summary sensor count reflects timers already in TimerManager at load time."""
+    manager = StubTimerManager()
+    manager.timers = {
+        "t1": StubTimerInfo("t1", device_id="dev1"),
+        "t2": StubTimerInfo("t2", device_id="dev1"),
+    }
+
+    _, summary_holder = await _setup_platform(hass, manager=manager)
+    summary = summary_holder[0]
+
+    assert summary.native_value == 2
+    assert set(summary.extra_state_attributes["timer_ids"]) == {"t1", "t2"}
+    assert summary.extra_state_attributes["by_device"]["dev1"] == 2
+
+
+async def test_bootstrap_does_not_duplicate_on_started_event(hass: HomeAssistant) -> None:
+    """A 'started' event for an already-bootstrapped timer updates rather than duplicates."""
+    manager = StubTimerManager()
+    manager.timers = {"t1": StubTimerInfo("t1", seconds=300, seconds_left=250)}
+
+    per_timer, _ = await _setup_platform(hass, manager=manager)
+    assert len(per_timer) == 1
+
+    _fire(hass, "started", "t1", seconds=300, seconds_left=250)
+    await hass.async_block_till_done()
+
+    assert len(per_timer) == 1
+
+
+# ---------------------------------------------------------------------------
+# Stale entity registry cleanup on startup
+# ---------------------------------------------------------------------------
+
+async def test_stale_registry_entries_removed_on_startup(hass: HomeAssistant) -> None:
+    """Entity registry entries for finished timers are removed when integration loads."""
+    ent_reg = er.async_get(hass)
+    # Simulate stale entries from a previous HA session.
+    ent_reg.async_get_or_create(
+        domain="sensor", platform=DOMAIN, unique_id="voice_timer_stale_1"
+    )
+    ent_reg.async_get_or_create(
+        domain="sensor", platform=DOMAIN, unique_id="voice_timer_stale_2"
+    )
+
+    manager = StubTimerManager()
+    manager.timers = {}  # no active timers
+
+    await _setup_platform(hass, manager=manager)
+
+    assert ent_reg.async_get_entity_id("sensor", DOMAIN, "voice_timer_stale_1") is None
+    assert ent_reg.async_get_entity_id("sensor", DOMAIN, "voice_timer_stale_2") is None
+
+
+async def test_active_timer_registry_entry_kept_on_startup(hass: HomeAssistant) -> None:
+    """A registry entry for a currently active timer is preserved."""
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        domain="sensor", platform=DOMAIN, unique_id="voice_timer_t_active"
+    )
+
+    manager = StubTimerManager()
+    manager.timers = {"t_active": StubTimerInfo("t_active")}
+
+    await _setup_platform(hass, manager=manager)
+
+    assert ent_reg.async_get_entity_id("sensor", DOMAIN, "voice_timer_t_active") is not None
+
+
+async def test_summary_registry_entry_not_touched(hass: HomeAssistant) -> None:
+    """The voice_timers_active registry entry is never removed by stale cleanup."""
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        domain="sensor", platform=DOMAIN, unique_id="voice_timers_active"
+    )
+
+    manager = StubTimerManager()
+    manager.timers = {}
+
+    await _setup_platform(hass, manager=manager)
+
+    # "voice_timers_active" does NOT start with "voice_timer_" so it is untouched.
+    assert ent_reg.async_get_entity_id("sensor", DOMAIN, "voice_timers_active") is not None
+
+
+# ---------------------------------------------------------------------------
+# finalise() cleans up the entity registry entry
+# ---------------------------------------------------------------------------
+
+async def test_finalise_removes_registry_entry(hass: HomeAssistant) -> None:
+    """After the linger period finalise() removes the entity registry entry."""
+    per_timer, _ = await _setup_platform(hass)
+
+    _fire(hass, "started", "t1")
+    await hass.async_block_till_done()
+
+    entity = per_timer["t1"]
+    # Ensure entity is in registry before finalise.
+    ent_reg = er.async_get(hass)
+    # Register the entry manually as the test harness doesn't go through the full platform.
+    if ent_reg.async_get(entity.entity_id) is None:
+        ent_reg.async_get_or_create(
+            domain="sensor", platform=DOMAIN, unique_id=entity._attr_unique_id
+        )
+
+    with patch("asyncio.sleep", new=AsyncMock()):
+        _fire(hass, "finished", "t1")
+        await hass.async_block_till_done()
+
+    assert ent_reg.async_get(entity.entity_id) is None
