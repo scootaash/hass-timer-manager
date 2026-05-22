@@ -36,12 +36,14 @@ class StubTimerInfo:
         seconds: int = 300,
         seconds_left: int | None = None,
         is_active: bool = True,
+        device_id: str = "dev1",
     ) -> None:
         self.id = timer_id
         self.name = name
         self.seconds = seconds
         self.seconds_left = seconds_left if seconds_left is not None else seconds
         self.is_active = is_active
+        self.device_id = device_id
         self.start_hours = 0
         self.start_minutes = 5
         self.start_seconds = 0
@@ -52,6 +54,7 @@ class StubTimerManager:
 
     def __init__(self) -> None:
         self.handlers: dict = {}
+        self.timers: dict = {}
         self.pause_timer = MagicMock()
         self.unpause_timer = MagicMock()
         self.cancel_timer = MagicMock()

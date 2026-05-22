@@ -20,6 +20,7 @@ try:
     from homeassistant.helpers.device_registry import DeviceInfo
 except ImportError:
     from homeassistant.helpers.entity import DeviceInfo  # type: ignore[no-redef]
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -71,6 +72,56 @@ async def async_setup_entry(
 
     entry.async_on_unload(hass.bus.async_listen(EVENT_TIMER, handle_event))
 
+    # On startup: clean stale registry entries and bootstrap sensors for timers
+    # that were already running before this integration loaded.
+    manager = hass.data.get(DOMAIN, {}).get("manager")
+    if manager is not None:
+        existing_timers: dict = (
+            getattr(manager, "timers", None) or getattr(manager, "_timers", None) or {}
+        )
+        if not isinstance(existing_timers, dict):
+            existing_timers = {}
+
+        active_ids = set(existing_timers.keys())
+
+        # Remove entity registry entries for timers that no longer exist.
+        # These are left behind when HA restarts during or after a timer's
+        # 30-second linger period, showing as "unavailable" on the dashboard.
+        ent_reg = er.async_get(hass)
+        for reg_entry in list(ent_reg.entities.values()):
+            if (
+                reg_entry.platform == DOMAIN
+                and reg_entry.unique_id.startswith("voice_timer_")
+                and reg_entry.unique_id.removeprefix("voice_timer_") not in active_ids
+            ):
+                ent_reg.async_remove(reg_entry.entity_id)
+                _LOGGER.debug("Removed stale timer entity %s", reg_entry.entity_id)
+
+        # Create entities for timers that started before this integration loaded.
+        bootstrap: list[VoiceTimerSensor] = []
+        for timer_id, timer_info in existing_timers.items():
+            if timer_id in entities:
+                continue
+            payload = {
+                "device_id": getattr(timer_info, "device_id", "") or "",
+                "event_type": "started",
+                "timer_id": getattr(timer_info, "id", timer_id),
+                "name": getattr(timer_info, "name", "") or "",
+                "seconds": getattr(timer_info, "seconds", 0),
+                "seconds_left": getattr(
+                    timer_info, "seconds_left", getattr(timer_info, "seconds", 0)
+                ),
+                "is_active": getattr(timer_info, "is_active", True),
+                "start_hours": getattr(timer_info, "start_hours", 0),
+                "start_minutes": getattr(timer_info, "start_minutes", 0),
+                "start_seconds": getattr(timer_info, "start_seconds", 0),
+            }
+            entity = VoiceTimerSensor(payload)
+            entities[timer_id] = entity
+            bootstrap.append(entity)
+        if bootstrap:
+            async_add_entities(bootstrap)
+
 
 class VoiceTimerSensor(SensorEntity):
     """A single voice timer surfaced as a sensor entity."""
@@ -91,7 +142,8 @@ class VoiceTimerSensor(SensorEntity):
         self._state: str = "active" if self._is_active else "paused"
 
         now = dt_util.utcnow()
-        self._started_at = now
+        elapsed = max(0, self._seconds - self._seconds_left)
+        self._started_at = now - timedelta(seconds=elapsed)
         self._finishes_at = now + timedelta(seconds=self._seconds_left)
 
         self._attr_unique_id = f"voice_timer_{self._timer_id}"
@@ -148,7 +200,14 @@ class VoiceTimerSensor(SensorEntity):
         try:
             await asyncio.sleep(LINGER_SECONDS)
         finally:
+            hass = self.hass
+            entity_id = self.entity_id
             await self.async_remove(force_remove=True)
+            # async_remove does not remove the entity registry entry, so stale
+            # "unavailable" sensors accumulate after HA restart. Remove it explicitly.
+            ent_reg = er.async_get(hass)
+            if ent_reg.async_get(entity_id) is not None:
+                ent_reg.async_remove(entity_id)
 
 
 class VoiceTimersActiveSensor(SensorEntity):
@@ -181,6 +240,21 @@ class VoiceTimersActiveSensor(SensorEntity):
         self.async_on_remove(
             self.hass.bus.async_listen(EVENT_TIMER, self._handle_event)
         )
+        # Bootstrap count from timers already active when the integration loads.
+        manager = self.hass.data.get(DOMAIN, {}).get("manager")
+        if manager is not None:
+            existing_timers: dict = (
+                getattr(manager, "timers", None)
+                or getattr(manager, "_timers", None)
+                or {}
+            )
+            if isinstance(existing_timers, dict) and existing_timers:
+                for timer_id, timer_info in existing_timers.items():
+                    device_id: str = getattr(timer_info, "device_id", "") or ""
+                    self._timer_ids.add(timer_id)
+                    self._device_of[timer_id] = device_id
+                    self._by_device[device_id] = self._by_device.get(device_id, 0) + 1
+                self.async_write_ha_state()
 
     @callback
     def _handle_event(self, event) -> None:
@@ -193,9 +267,10 @@ class VoiceTimersActiveSensor(SensorEntity):
             return
 
         if kind == "started":
-            self._timer_ids.add(timer_id)
-            self._device_of[timer_id] = device_id
-            self._by_device[device_id] = self._by_device.get(device_id, 0) + 1
+            if timer_id not in self._timer_ids:
+                self._timer_ids.add(timer_id)
+                self._device_of[timer_id] = device_id
+                self._by_device[device_id] = self._by_device.get(device_id, 0) + 1
         elif kind in ("cancelled", "finished"):
             if timer_id in self._timer_ids:
                 self._timer_ids.discard(timer_id)
