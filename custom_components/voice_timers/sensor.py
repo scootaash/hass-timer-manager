@@ -22,10 +22,9 @@ except ImportError:
     from homeassistant.helpers.entity import DeviceInfo  # type: ignore[no-redef]
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENT_TIMER, LINGER_SECONDS
+from .const import DOMAIN, EVENT_TIMER, LINGER_SECONDS, LINGER_SECONDS_FINISHED
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -206,12 +205,13 @@ class VoiceTimerSensor(SensorEntity):
 
     async def finalise(self, kind: str) -> None:
         """Hold the entity at the terminal state briefly, then remove."""
+        linger = LINGER_SECONDS_FINISHED if kind == "finished" else LINGER_SECONDS
         self._is_active = False
         self._seconds_left = 0
         self._state = kind  # 'finished' or 'cancelled'
         self.async_write_ha_state()
         try:
-            await asyncio.sleep(LINGER_SECONDS)
+            await asyncio.sleep(linger)
         finally:
             hass = self.hass
             entity_id = self.entity_id
