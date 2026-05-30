@@ -46,32 +46,37 @@ filter:
 
 ### Mushroom
 
-Requires `auto-entities`, `timer-bar-card`, and [Mushroom](https://github.com/piitaya/lovelace-mushroom) from HACS.
+Requires [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) and [Mushroom](https://github.com/piitaya/lovelace-mushroom) from HACS. Shows each timer as a Mushroom card with a colour-coded icon (green → orange → red as time runs out) and a pause badge when paused.
 
 ```yaml
 type: custom:auto-entities
 show_empty: false
-card:
-  type: custom:timer-bar-card
-  name: Voice timers
-  compressed: true
-  active_state: active
-  start_time:
-    attribute: started_at
-  end_time:
-    attribute: finishes_at
-  bar_foreground: rgb(var(--rgb-primary-color))
-  bar_background: rgba(var(--rgb-primary-color), 0.15)
-  text_color: var(--primary-text-color)
-  text_width: 5em
-  modifications:
-    - elapsed: 75%
-      bar_foreground: orange
-    - elapsed: 95%
-      bar_foreground: red
 filter:
   include:
     - entity_id: sensor.voice_timer_*
+card:
+  type: custom:mushroom-template-card
+  primary: "{{ state_attr(entity, 'friendly_label') | capitalize }}"
+  secondary: >-
+    {% set end = state_attr(entity, 'finishes_at') | as_datetime %}
+    {% if end %}
+      {% set s = ((end - now()).total_seconds()) | int(0) %}
+      {% set s = [s, 0] | max %}
+      {{ s // 60 }}m {{ '%02d' | format(s % 60) }}s remaining
+    {% endif %}
+  icon: mdi:timer-sand
+  icon_color: >-
+    {% set s = state_attr(entity, 'seconds_left') | int(0) %}
+    {% set t = state_attr(entity, 'seconds_total') | int(1) %}
+    {% set elapsed = (1 - s / t) if t > 0 else 1 %}
+    {% if elapsed > 0.95 %}red
+    {% elif elapsed > 0.75 %}orange
+    {% else %}green{% endif %}
+  badge_icon: >-
+    {% if states(entity) == 'paused' %}mdi:pause-circle{% endif %}
+  badge_color: grey
+  tap_action:
+    action: none
 ```
 
 ### Key options
