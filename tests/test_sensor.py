@@ -20,6 +20,7 @@ except (ImportError, AttributeError):
 
 from custom_components.voice_timers.sensor import (
     LINGER_SECONDS,
+    LINGER_SECONDS_FINISHED,
     VoiceTimerSensor,
     VoiceTimersActiveSensor,
     async_setup_entry,
@@ -490,23 +491,64 @@ async def test_summary_registry_entry_not_touched(hass: HomeAssistant) -> None:
 # ---------------------------------------------------------------------------
 
 async def test_finalise_removes_registry_entry(hass: HomeAssistant) -> None:
-    """After the linger period finalise() removes the entity registry entry."""
+    """After the linger period finalise() removes any registry entry for the entity."""
     per_timer, _ = await _setup_platform(hass)
 
     _fire(hass, "started", "t1")
     await hass.async_block_till_done()
 
     entity = per_timer["t1"]
-    # Ensure entity is in registry before finalise.
+    # Manually add a registry entry, simulating an older version that stored unique_ids.
     ent_reg = er.async_get(hass)
-    # Register the entry manually as the test harness doesn't go through the full platform.
-    if ent_reg.async_get(entity.entity_id) is None:
-        ent_reg.async_get_or_create(
-            domain="sensor", platform=DOMAIN, unique_id=entity._attr_unique_id
-        )
+    ent_reg.async_get_or_create(
+        domain="sensor",
+        platform=DOMAIN,
+        unique_id="voice_timer_t1",
+        suggested_object_id="voice_timer_t1",
+    )
 
     with patch("asyncio.sleep", new=AsyncMock()):
         _fire(hass, "finished", "t1")
         await hass.async_block_till_done()
 
     assert ent_reg.async_get(entity.entity_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Linger duration: finished vs cancelled
+# ---------------------------------------------------------------------------
+
+async def test_finished_timer_uses_one_hour_linger(hass: HomeAssistant) -> None:
+    """Finished timers sleep for LINGER_SECONDS_FINISHED so they show for 1 hour."""
+    per_timer, _ = await _setup_platform(hass)
+    _fire(hass, "started", "t1")
+    await hass.async_block_till_done()
+
+    sleep_calls: list[float] = []
+
+    async def capture_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    with patch("asyncio.sleep", new=capture_sleep):
+        _fire(hass, "finished", "t1")
+        await hass.async_block_till_done()
+
+    assert sleep_calls and sleep_calls[0] == LINGER_SECONDS_FINISHED
+
+
+async def test_cancelled_timer_uses_short_linger(hass: HomeAssistant) -> None:
+    """Cancelled timers sleep for the short LINGER_SECONDS constant."""
+    per_timer, _ = await _setup_platform(hass)
+    _fire(hass, "started", "t1")
+    await hass.async_block_till_done()
+
+    sleep_calls: list[float] = []
+
+    async def capture_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    with patch("asyncio.sleep", new=capture_sleep):
+        _fire(hass, "cancelled", "t1")
+        await hass.async_block_till_done()
+
+    assert sleep_calls and sleep_calls[0] == LINGER_SECONDS
